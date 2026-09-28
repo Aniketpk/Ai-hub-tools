@@ -6,7 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start",
+    "start": "next start --port $PORT",
     "test:gemini": "node scripts/test-gemini.mjs"
   },
   "dependencies": {
