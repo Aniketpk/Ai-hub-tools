@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 # Use a different port if 8000/8888 is occupied
-PORT = 55555
+PORT = int(os.environ.get("PORT", 55555))
 
 # Manual .env loading
 def load_env_manual(filepath=".env.local"):
