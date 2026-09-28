@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Code, Copy, Download, Loader2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { AIProcessingPulse, AIResultMotion } from "@/components/ai-motion"
+import { Code, Copy, Check, Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -12,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 export default function CodeGenerator() {
   const [prompt, setPrompt] = useState("")
   const [generatedCode, setGeneratedCode] = useState("")
+  const [copied, setCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [language, setLanguage] = useState("javascript")
 
@@ -26,61 +29,47 @@ export default function CodeGenerator() {
     { value: "bash", label: "Bash", extension: "sh" },
   ]
 
-  const mockCodeExamples = {
-    javascript: `// Function to calculate factorial
-function factorial(n) {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-}
-
-// Example usage
-console.log(factorial(5)); // Output: 120`,
-
-    python: `# Function to calculate factorial
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
-
-# Example usage
-print(factorial(5))  # Output: 120`,
-
-    react: `import React, { useState } from 'react';
-
-function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <h2>Count: {count}</h2>
-      <button onClick={() => setCount(count + 1)}>
-        Increment
-      </button>
-    </div>
-  );
-}
-
-export default Counter;`,
-  }
-
   const handleGenerate = async () => {
     if (!prompt.trim()) return
 
     setIsLoading(true)
 
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2500))
+    try {
+      // Call the AI API for code generation
+      const response = await fetch('/api/ai/generate-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: prompt,
+          language: language,
+        }),
+      })
 
-    // Mock code generation based on language
-    const baseCode = mockCodeExamples[language] || mockCodeExamples.javascript
-    const customCode = `// Generated code for: ${prompt}\n\n${baseCode}`
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate code')
+      }
 
-    setGeneratedCode(customCode)
-    setIsLoading(false)
+      const data = await response.json()
+      setGeneratedCode(data.code || '// No code generated')
+    } catch (error) {
+      console.error('Error:', error)
+      setGeneratedCode(`// Error: ${error instanceof Error ? error.message : 'Failed to generate code'}\n// Please try again with a different prompt.`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(generatedCode)
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedCode)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch (error) {
+      console.error("Could not copy output:", error)
+    }
   }
 
   const downloadCode = () => {
@@ -127,7 +116,7 @@ export default Counter;`,
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={4}
-          className="border-2 focus:border-primary resize-none"
+          className="border-2 focus:border-primary resize-none transition-[border-color,box-shadow] duration-200 focus-visible:shadow-[0_0_0_4px_rgba(139,92,246,0.16)]"
         />
 
         <div className="flex items-center justify-between">
@@ -151,8 +140,9 @@ export default Counter;`,
         </div>
       </div>
 
-      {generatedCode && (
-        <Card className="border-2 border-primary/20 bg-primary/5">
+      <AnimatePresence>{isLoading && <AIProcessingPulse label="Generating your code" />}</AnimatePresence>
+      <AnimatePresence>{generatedCode && (
+        <AIResultMotion><Card className="border-2 border-primary/20 bg-primary/5">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -163,8 +153,7 @@ export default Counter;`,
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy
+                  <AnimatePresence mode="wait" initial={false}><motion.span key={copied ? "copied" : "copy"} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .14 }} className="inline-flex items-center"><span className="mr-1">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</span>{copied ? "Copied" : "Copy"}</motion.span></AnimatePresence>
                 </Button>
                 <Button variant="outline" size="sm" onClick={downloadCode}>
                   <Download className="h-4 w-4 mr-1" />
@@ -184,18 +173,18 @@ export default Counter;`,
               </div>
             </div>
           </CardContent>
-        </Card>
-      )}
+        </Card></AIResultMotion>
+      )}</AnimatePresence>
 
       {/* Examples */}
       <Card className="bg-muted/30">
         <CardContent className="p-4">
           <h4 className="font-semibold mb-2 text-sm">💡 Example prompts:</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• "Create a function to validate email addresses"</li>
-            <li>• "Build a React component for a responsive navigation bar"</li>
-            <li>• "Write a Python script to scrape website data"</li>
-            <li>• "Generate SQL queries to join multiple tables"</li>
+            <li>• &quot;Create a function to validate email addresses&quot;</li>
+            <li>• &quot;Build a React component for a responsive navigation bar&quot;</li>
+            <li>• &quot;Write a Python script to scrape website data&quot;</li>
+            <li>• &quot;Generate SQL queries to join multiple tables&quot;</li>
           </ul>
         </CardContent>
       </Card>

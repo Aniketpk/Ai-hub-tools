@@ -25,7 +25,7 @@ export default function FloatingChatbot() {
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-end p-4 sm:items-end sm:justify-end">
           <div className="fixed inset-0 bg-black/50" onClick={() => setIsOpen(false)} />
-          <Card className="relative w-full max-w-md h-[80vh] sm:h-[70vh] flex flex-col z-50">
+          <Card className="relative z-50 flex h-[80vh] max-h-[90dvh] w-full max-w-md min-h-0 flex-col sm:h-[70vh]">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-semibold">AI Assistant</h3>
               <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
@@ -33,7 +33,7 @@ export default function FloatingChatbot() {
                 <span className="sr-only">Close</span>
               </Button>
             </div>
-            <CardContent className="flex-1 p-0 overflow-hidden">
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
               <AIChatbot />
             </CardContent>
           </Card>

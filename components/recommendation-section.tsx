@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Star, Users, Sparkles } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import type { Tool } from "@/lib/tools-data"
 
 interface RecommendationSectionProps {
@@ -91,9 +92,11 @@ export function RecommendationSection({
                 className="hover:shadow-xl transition-all duration-300 group border-2 hover:border-primary/30"
               >
                 <CardHeader className="p-0">
-                  <img
+                  <Image
                     src={tool.image || "/placeholder.svg"}
                     alt={tool.name}
+                    width={400}
+                    height={200}
                     className="w-full h-48 object-cover rounded-t-lg group-hover:scale-105 transition-transform duration-300"
                   />
                 </CardHeader>

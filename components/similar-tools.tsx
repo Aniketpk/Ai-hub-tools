@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Star, Users, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import type { Tool } from "@/lib/tools-data"
 
 interface SimilarToolsProps {
-  toolId: string
+  toolId: number
   limit?: number
 }
 
@@ -55,9 +56,11 @@ export function SimilarTools({ toolId, limit = 4 }: SimilarToolsProps) {
           >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <img
+                <Image
                   src={tool.image || "/placeholder.svg"}
                   alt={tool.name}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 rounded-lg object-cover group-hover:scale-105 transition-transform"
                 />
                 <div className="flex-1 min-w-0">

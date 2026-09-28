@@ -11,8 +11,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 
+interface ReviewData {
+  rating: number
+  title: string
+  content: string
+  tags: string[]
+}
+
 interface ReviewFormProps {
-  onSubmit: (reviewData: any) => void
+  onSubmit: (reviewData: ReviewData) => void
   onCancel: () => void
 }
 
@@ -78,11 +85,10 @@ export default function ReviewForm({ onSubmit, onCancel }: ReviewFormProps) {
                   onClick={() => setRating(star)}
                 >
                   <Star
-                    className={`h-8 w-8 transition-colors ${
-                      star <= (hoverRating || rating)
+                    className={`h-8 w-8 transition-colors ${star <= (hoverRating || rating)
                         ? "fill-yellow-400 text-yellow-400"
                         : "text-muted-foreground hover:text-yellow-300"
-                    }`}
+                      }`}
                   />
                 </button>
               ))}

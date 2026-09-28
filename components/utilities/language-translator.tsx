@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Languages, ArrowRightLeft, Copy, Volume2, Loader2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { AIProcessingPulse, AIResultMotion } from "@/components/ai-motion"
+import { Languages, ArrowRightLeft, Copy, Check, Volume2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -11,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function LanguageTranslator() {
   const [sourceText, setSourceText] = useState("")
   const [translatedText, setTranslatedText] = useState("")
+  const [copied, setCopied] = useState(false)
   const [sourceLang, setSourceLang] = useState("en")
   const [targetLang, setTargetLang] = useState("es")
   const [isLoading, setIsLoading] = useState(false)
@@ -30,30 +33,38 @@ export default function LanguageTranslator() {
     { code: "hi", name: "Hindi" },
   ]
 
-  const mockTranslations = {
-    "en-es": "Hola, ¿cómo estás? Espero que tengas un buen día.",
-    "en-fr": "Bonjour, comment allez-vous? J'espère que vous passez une bonne journée.",
-    "en-de": "Hallo, wie geht es dir? Ich hoffe, du hast einen schönen Tag.",
-    "es-en": "Hello, how are you? I hope you have a good day.",
-    "fr-en": "Hello, how are you? I hope you have a good day.",
-  }
-
   const handleTranslate = async () => {
     if (!sourceText.trim()) return
 
     setIsLoading(true)
 
-    // Simulate translation processing
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Call the AI API for translation
+      const response = await fetch('/api/ai/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: sourceText,
+          sourceLang: sourceLang,
+          targetLang: targetLang,
+        }),
+      })
 
-    // Mock translation
-    const translationKey = `${sourceLang}-${targetLang}`
-    const mockResult =
-      mockTranslations[translationKey] ||
-      `[Translated from ${languages.find((l) => l.code === sourceLang)?.name} to ${languages.find((l) => l.code === targetLang)?.name}]: ${sourceText}`
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to translate text')
+      }
 
-    setTranslatedText(mockResult)
-    setIsLoading(false)
+      const data = await response.json()
+      setTranslatedText(data.translation || 'Translation failed. Please try again.')
+    } catch (error) {
+      console.error('Error:', error)
+      setTranslatedText(error instanceof Error ? error.message : 'Failed to translate. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const swapLanguages = () => {
@@ -67,8 +78,14 @@ export default function LanguageTranslator() {
     }
   }
 
-  const copyTranslation = () => {
-    navigator.clipboard.writeText(translatedText)
+  const copyTranslation = async () => {
+    try {
+      await navigator.clipboard.writeText(translatedText)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch (error) {
+      console.error("Could not copy output:", error)
+    }
   }
 
   const speakText = (text: string, lang: string) => {
@@ -137,7 +154,7 @@ export default function LanguageTranslator() {
               value={sourceText}
               onChange={(e) => setSourceText(e.target.value)}
               rows={8}
-              className="border-2 focus:border-primary resize-none"
+              className="border-2 focus:border-primary resize-none transition-[border-color,box-shadow] duration-200 focus-visible:shadow-[0_0_0_4px_rgba(139,92,246,0.16)]"
             />
 
             <div className="flex items-center justify-between mt-3">
@@ -170,19 +187,17 @@ export default function LanguageTranslator() {
                   <Button variant="ghost" size="sm" onClick={() => speakText(translatedText, targetLang)}>
                     <Volume2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={copyTranslation}>
-                    <Copy className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" onClick={copyTranslation} aria-label={copied ? "Translation copied" : "Copy translation"}>
+                    <AnimatePresence mode="wait" initial={false}><motion.span key={copied ? "copied" : "copy"} initial={{ opacity: 0, scale: .75 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .75 }}><span className="sr-only">{copied ? "Copied" : "Copy translation"}</span>{copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}</motion.span></AnimatePresence>
                   </Button>
                 </div>
               )}
             </div>
 
             <div className="min-h-[200px] p-3 bg-background rounded-lg border-2 border-border">
-              {translatedText ? (
-                <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{translatedText}</p>
-              ) : (
+              <AnimatePresence mode="wait">{isLoading ? <AIProcessingPulse label="Translating your text" /> : translatedText ? <AIResultMotion><p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{translatedText}</p></AIResultMotion> : (
                 <p className="text-muted-foreground/50 italic">Translation will appear here...</p>
-              )}
+              )}</AnimatePresence>
             </div>
 
             {translatedText && (

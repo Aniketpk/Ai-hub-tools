@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import Image from "next/image"
 
 import { useState } from "react"
 import { Upload, ImageIcon, Loader2, Eye, FileText } from "lucide-react"
@@ -8,11 +9,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { AnimatePresence } from "framer-motion"
+import { AIProcessingPulse, AIResultMotion } from "@/components/ai-motion"
+
+interface ImageAnalysis {
+  description: string
+  objects: { name: string; confidence: number }[]
+  colors: { name: string; percentage: number }[]
+  text: string
+  mood: string
+  tags: string[]
+}
 
 export default function ImageAnalyzer() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string>("")
-  const [analysis, setAnalysis] = useState<any>(null)
+  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,39 +40,36 @@ export default function ImageAnalyzer() {
     }
   }
 
-  const analyzeImage = async () => {
-    if (!selectedImage) return
+    const analyzeImage = async () => {
+        if (!selectedImage || !imagePreview) return
 
-    setIsLoading(true)
+        setIsLoading(true)
 
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+        try {
+            // Get base64 without prefix
+            const base64Image = imagePreview.split(',')[1]
 
-    // Mock analysis results
-    const mockAnalysis = {
-      description:
-        "This image shows a modern office workspace with a laptop computer, coffee cup, and notebook on a wooden desk. The lighting appears to be natural daylight coming from a window. The overall aesthetic is clean and minimalist.",
-      objects: [
-        { name: "Laptop", confidence: 95 },
-        { name: "Coffee Cup", confidence: 88 },
-        { name: "Notebook", confidence: 82 },
-        { name: "Wooden Desk", confidence: 91 },
-        { name: "Window", confidence: 76 },
-      ],
-      colors: [
-        { name: "Brown", percentage: 35 },
-        { name: "White", percentage: 28 },
-        { name: "Black", percentage: 20 },
-        { name: "Blue", percentage: 17 },
-      ],
-      text: "No readable text detected in this image",
-      mood: "Professional, Calm, Organized",
-      tags: ["workspace", "office", "productivity", "minimalist", "modern"],
+            const response = await fetch('/api/ai/analyze-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    image: base64Image,
+                    prompt: "Analyze this image. Provide a description, a list of objects detected (object: confidence), and some hashtags."
+                }),
+            })
+
+            const data = await response.json()
+            
+            if (!response.ok) throw new Error(data.error)
+
+            setAnalysis(data.analysis)
+        } catch (error: any) {
+            console.error("Analysis failed:", error)
+            // Fallback mock if absolutely necessary, but we show the error now
+        } finally {
+            setIsLoading(false)
+        }
     }
-
-    setAnalysis(mockAnalysis)
-    setIsLoading(false)
-  }
 
   return (
     <div className="space-y-6">
@@ -70,11 +79,13 @@ export default function ImageAnalyzer() {
         <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
           {imagePreview ? (
             <div className="space-y-4">
-              <img
+              <Image
                 src={imagePreview || "/placeholder.svg"}
                 alt="Preview"
-                className="max-w-full max-h-64 mx-auto rounded-lg border-2 border-border"
-                onError={(e) => {
+                width={400}
+                height={256}
+                className="max-w-full max-h-64 mx-auto rounded-lg border-2 border-border object-contain"
+                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
                   const target = e.target as HTMLImageElement
                   target.src = "/placeholder.svg"
                 }}
@@ -117,8 +128,9 @@ export default function ImageAnalyzer() {
         </div>
       </div>
 
-      {analysis && (
-        <div className="space-y-4">
+      <AnimatePresence mode="wait">
+      {isLoading ? <AIProcessingPulse key="analyzing" label="Analyzing the selected image" /> : analysis && (
+        <AIResultMotion key="analysis"><div className="space-y-4">
           <h3 className="text-lg font-semibold">Analysis Results</h3>
 
           {/* Description */}
@@ -138,7 +150,7 @@ export default function ImageAnalyzer() {
               <CardContent className="p-4">
                 <h4 className="font-semibold mb-3">Objects Detected</h4>
                 <div className="space-y-2">
-                  {analysis.objects.map((obj: any, index: number) => (
+                  {analysis.objects.map((obj, index) => (
                     <div key={index} className="flex items-center justify-between">
                       <span className="text-sm">{obj.name}</span>
                       <Badge variant="secondary" className="text-xs">
@@ -155,7 +167,7 @@ export default function ImageAnalyzer() {
               <CardContent className="p-4">
                 <h4 className="font-semibold mb-3">Color Analysis</h4>
                 <div className="space-y-2">
-                  {analysis.colors.map((color: any, index: number) => (
+                  {analysis.colors.map((color, index) => (
                     <div key={index} className="flex items-center justify-between">
                       <span className="text-sm">{color.name}</span>
                       <span className="text-xs text-muted-foreground">{color.percentage}%</span>
@@ -188,8 +200,9 @@ export default function ImageAnalyzer() {
               </CardContent>
             </Card>
           </div>
-        </div>
+        </div></AIResultMotion>
       )}
+      </AnimatePresence>
 
       {/* Info */}
       <Card className="bg-muted/30">

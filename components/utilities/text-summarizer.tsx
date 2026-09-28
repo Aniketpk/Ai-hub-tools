@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Copy, Download, Loader2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { AIProcessingPulse, AIResultMotion } from "@/components/ai-motion"
+import { FileText, Copy, Check, Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -12,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 export default function TextSummarizer() {
   const [inputText, setInputText] = useState("")
   const [summary, setSummary] = useState("")
+  const [copied, setCopied] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [summaryLength, setSummaryLength] = useState("medium")
 
@@ -20,31 +23,43 @@ export default function TextSummarizer() {
 
     setIsLoading(true)
 
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      // Call our API route
+      const response = await fetch('/api/ai/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: inputText,
+          length: summaryLength,
+        }),
+      })
 
-    // Mock summary generation
-    const sentences = inputText.split(".").filter((s) => s.trim().length > 0)
-    let summaryText = ""
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to generate summary')
+      }
 
-    switch (summaryLength) {
-      case "short":
-        summaryText = sentences.slice(0, Math.max(1, Math.floor(sentences.length * 0.3))).join(". ") + "."
-        break
-      case "medium":
-        summaryText = sentences.slice(0, Math.max(2, Math.floor(sentences.length * 0.5))).join(". ") + "."
-        break
-      case "long":
-        summaryText = sentences.slice(0, Math.max(3, Math.floor(sentences.length * 0.7))).join(". ") + "."
-        break
+      const data = await response.json()
+      setSummary(data.summary)
+    } catch (err: unknown) {
+      const error = err as Error
+      console.error('Error:', error)
+      setSummary(`Error: ${error.message || 'Something went wrong. Please check your API key and server logs.'}`)
+    } finally {
+      setIsLoading(false)
     }
-
-    setSummary(summaryText || "This text appears to be a concise summary of the key points from the original content.")
-    setIsLoading(false)
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(summary)
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(summary)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch (error) {
+      console.error("Could not copy output:", error)
+    }
   }
 
   const downloadSummary = () => {
@@ -87,7 +102,7 @@ export default function TextSummarizer() {
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           rows={8}
-          className="border-2 focus:border-primary resize-none"
+          className="border-2 focus:border-primary resize-none transition-[border-color,box-shadow] duration-200 focus-visible:shadow-[0_0_0_4px_rgba(139,92,246,0.16)]"
         />
 
         <div className="flex items-center justify-between">
@@ -112,8 +127,9 @@ export default function TextSummarizer() {
         </div>
       </div>
 
-      {summary && (
-        <Card className="border-2 border-primary/20 bg-primary/5">
+      <AnimatePresence>{isLoading && <AIProcessingPulse label="Working on your summary" />}</AnimatePresence>
+      <AnimatePresence>{summary && (
+        <AIResultMotion><Card className="border-2 border-primary/20 bg-primary/5">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -124,8 +140,7 @@ export default function TextSummarizer() {
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy
+                  <AnimatePresence mode="wait" initial={false}><motion.span key={copied ? "copied" : "copy"} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .14 }} className="inline-flex items-center"><span className="mr-1">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</span>{copied ? "Copied" : "Copy"}</motion.span></AnimatePresence>
                 </Button>
                 <Button variant="outline" size="sm" onClick={downloadSummary}>
                   <Download className="h-4 w-4 mr-1" />
@@ -145,8 +160,8 @@ export default function TextSummarizer() {
               </div>
             </div>
           </CardContent>
-        </Card>
-      )}
+        </Card></AIResultMotion>
+      )}</AnimatePresence>
 
       {/* Tips */}
       <Card className="bg-muted/30">

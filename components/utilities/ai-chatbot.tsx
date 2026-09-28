@@ -3,13 +3,11 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Bot, User, Loader2, RotateCcw, Search, Star, Users } from "lucide-react"
+import { Send, Bot, User, Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { allTools } from "@/lib/tools-data"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 
 interface Message {
   id: string
@@ -19,6 +17,7 @@ interface Message {
 }
 
 export default function AIChatbot() {
+  const reduceMotion = Boolean(useReducedMotion())
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -30,66 +29,10 @@ export default function AIChatbot() {
   ])
   const [inputMessage, setInputMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // Enhanced response system with tool knowledge
-  const getToolResponse = (query: string) => {
-    const lowerQuery = query.toLowerCase();
-    
-    // Check if query is asking about specific tools
-    const matchingTools = allTools.filter(tool => 
-      tool.name.toLowerCase().includes(lowerQuery) ||
-      tool.description.toLowerCase().includes(lowerQuery) ||
-      tool.category.toLowerCase().includes(lowerQuery) ||
-      tool.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
-    );
-    
-    if (matchingTools.length > 0) {
-      const tool = matchingTools[0];
-      return `I found information about **${tool.name}** for you:
-
-${tool.description}
-
-**Category:** ${tool.category}
-**Rating:** ${tool.rating}/5 (${tool.reviews} reviews)
-**Pricing:** ${tool.pricing}
-
-${tool.longDescription ? tool.longDescription : ''}
-
-Tags: ${tool.tags.join(', ')}
-
-Would you like to know more about this tool or search for others?`;
-    }
-    
-    // Check for category queries
-    const categories = ["language models", "image generation", "development", "content creation", "video generation", "productivity"];
-    const foundCategory = categories.find(cat => lowerQuery.includes(cat));
-    
-    if (foundCategory) {
-      const categoryTools = allTools.filter(tool => tool.category.toLowerCase().includes(foundCategory));
-      if (categoryTools.length > 0) {
-        const topTools = categoryTools.sort((a, b) => b.rating - a.rating).slice(0, 3);
-        const toolList = topTools.map(tool => `**${tool.name}** - ${tool.description} (Rating: ${tool.rating}/5)`).join('\n\n');
-        return `Here are the top tools in the **${foundCategory}** category:
-
-${toolList}
-
-Would you like more details about any of these tools?`;
-      }
-    }
-    
-    // Default responses
-    const defaultResponses = [
-      "That's a great question! Let me think about that for a moment...",
-      "I understand what you're asking. Here's my perspective on that topic...",
-      "Interesting point! I'd be happy to help you explore this further...",
-      "Based on what you've shared, I think there are several approaches we could consider...",
-      "That's a complex topic with many facets. Let me break it down for you...",
-    ];
-    
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)] +
-      ` Regarding "${query}", I think this is an important topic that deserves careful consideration. Would you like me to elaborate on any specific aspect?`;
-  }
+  useEffect(() => setHydrated(true), [])
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -108,24 +51,83 @@ Would you like more details about any of these tools?`;
     }
 
     setMessages((prev) => [...prev, userMessage])
+    const currentInput = inputMessage.trim()
     setInputMessage("")
     setIsLoading(true)
 
-    // Simulate AI response delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Build conversation history for context
+      const conversationHistory = messages
+        .filter(msg => msg.id !== "1") // Exclude initial greeting
+        .map(msg => ({
+          sender: msg.sender,
+          content: msg.content
+        }))
 
-    const botResponse: Message = {
-      id: (Date.now() + 1).toString(),
-      content: getToolResponse(userMessage.content),
-      sender: "bot",
-      timestamp: new Date(),
+      let botContent = "";
+      
+      // Hybrid Logic: Use local Gemma for simple queries
+      if (currentInput.toLowerCase().includes("simple") || currentInput.toLowerCase().includes("local") || currentInput.toLowerCase().includes("fast")) {
+        try {
+          const gemmaResponse = await fetch("/api/ai-hub", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: currentInput, mode: "local" }),
+          })
+          const data = await gemmaResponse.json()
+          if (gemmaResponse.ok && data.result) {
+            botContent = `[Gemma Local] ${data.result}`
+          }
+        } catch (e) {
+          console.warn("Local Gemma not available, falling back to API", e)
+        }
+      }
+
+      if (!botContent) {
+        // Call the standard AI API (GPT-4/Claude)
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: currentInput,
+            conversationHistory: conversationHistory,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to get AI response')
+        }
+
+        const data = await response.json()
+        botContent = data.reply;
+      }
+
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: botContent || "I apologize, but I couldn't generate a response. Please try again.",
+        sender: "bot",
+        timestamp: new Date(),
+      }
+
+      setMessages((prev) => [...prev, botResponse])
+    } catch (error) {
+      console.error('Error:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: error instanceof Error ? error.message : "Sorry, there was an error. Please try again.",
+        sender: "bot",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
     }
-
-    setMessages((prev) => [...prev, botResponse])
-    setIsLoading(false)
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
@@ -145,111 +147,111 @@ Would you like more details about any of these tools?`;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">AI Assistant Chat</h3>
+    <div className="flex h-[min(600px,85dvh)] min-h-0 w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-card/30 shadow-2xl backdrop-blur-md relative">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-white/5 bg-white/5 backdrop-blur-xl z-10">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary blur-md opacity-40 animate-pulse" />
+            <Avatar className="h-10 w-10 border-2 border-primary/50 relative bg-background">
+              <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white">
+                <Bot className="h-5 w-5" />
+              </AvatarFallback>
+            </Avatar>
+            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">AI Utility</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-primary font-medium px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">Hybrid Active</span>
+              <span className="text-[9px] text-white/40 uppercase tracking-tighter">Gemma + GPT-4</span>
+            </div>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={clearChat}>
+        <Button variant="ghost" size="sm" onClick={clearChat} className="hover:bg-white/5 text-muted-foreground hover:text-white rounded-full">
           <RotateCcw className="h-4 w-4 mr-1" />
-          Clear Chat
+          Clear
         </Button>
       </div>
 
-      <Card className="border-2">
-        <CardContent className="p-0">
-          <ScrollArea className="h-96 p-4" ref={scrollAreaRef}>
-            <div className="space-y-4">
-              {messages.map((message) => (
+      {/* Chat Area — min-h-0 so the footer input stays visible inside flex layouts */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4" ref={scrollAreaRef}>
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <motion.div
+              key={message.id}
+              initial={reduceMotion ? false : { opacity: 0, y: 12, scale: .98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 220, damping: 22 }}
+              className={`flex gap-3 ${message.sender === "user" ? "flex-row-reverse" : "flex-row"} group`}
+            >
+              <Avatar className={`h-8 w-8 border ${message.sender === "bot" ? "border-primary/20" : "border-white/10"} mt-1 scale-0 group-hover:scale-100 transition-transform duration-300`}>
+                <AvatarFallback className={message.sender === "bot" ? "bg-primary/10 text-primary" : "bg-white/10"}>
+                  {message.sender === "bot" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className={`flex flex-col ${message.sender === "user" ? "items-end" : "items-start"} max-w-[80%]`}>
                 <div
-                  key={message.id}
-                  className={`flex gap-3 ${message.sender === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {message.sender === "bot" && (
-                    <Avatar className="border-2 border-primary">
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        <Bot className="h-4 w-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-
-                  <div
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                  className={`rounded-2xl p-3 shadow-sm backdrop-blur-sm ${message.sender === "user"
+                    ? "bg-gradient-to-br from-primary to-purple-600 text-white rounded-tr-none"
+                    : "bg-white/5 border border-white/10 text-foreground rounded-tl-none hover:bg-white/10 transition-colors"
                     }`}
-                  >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                    <p
-                      className={`text-xs mt-2 ${
-                        message.sender === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
-                      }`}
-                    >
-                      {message.timestamp.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-
-                  {message.sender === "user" && (
-                    <Avatar className="border-2 border-accent">
-                      <AvatarFallback className="bg-accent text-accent-foreground">
-                        <User className="h-4 w-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
+                >
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                 </div>
-              ))}
+                <span className="text-[10px] text-muted-foreground mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {hydrated ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                </span>
+              </div>
+            </motion.div>
+          ))}
 
-              {isLoading && (
-                <div className="flex gap-3 justify-start">
-                  <Avatar className="border-2 border-primary">
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      <Bot className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="bg-muted rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm text-muted-foreground">AI is thinking...</span>
-                    </div>
-                  </div>
+          <AnimatePresence>{isLoading && (
+            <motion.div key="chat-processing" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -6 }} className="flex gap-3">
+              <Avatar className="h-8 w-8 border border-primary/20 mt-1">
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  <Bot className="h-4 w-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none p-3 flex items-center gap-2">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce"></span>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            </motion.div>
+          )}</AnimatePresence>
+        </div>
+      </div>
 
-          <div className="border-t border-border p-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Type your message here..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={isLoading}
-                className="border-2 focus:border-primary"
-              />
-              <Button onClick={handleSendMessage} disabled={!inputMessage.trim() || isLoading} size="sm">
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Usage Tips */}
-      <Card className="bg-muted/30">
-        <CardContent className="p-4">
-          <h4 className="font-semibold mb-2 text-sm">💡 Chat tips:</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• Ask about specific AI tools by name (e.g., "Tell me about GPT-4 Turbo")</li>
-            <li>• Search tools by category (e.g., "Show me image generation tools")</li>
-            <li>• Request recommendations based on your needs</li>
-            <li>• Compare tools by asking about their features and ratings</li>
-          </ul>
-        </CardContent>
-      </Card>
+      {/* Input Area */}
+      <div className="shrink-0 border-t border-white/5 bg-white/5 p-4 backdrop-blur-xl z-10">
+        <div className="relative w-full">
+          <Input
+            type="text"
+            placeholder="Ask about AI tools..."
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            className="h-12 w-full min-w-0 rounded-full border-white/10 bg-black/20 pr-14 transition-all placeholder:text-muted-foreground/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+          />
+          <Button
+            type="button"
+            onClick={handleSendMessage}
+            disabled={!inputMessage.trim() || isLoading}
+            size="icon"
+            className="absolute right-1.5 top-1/2 size-9 -translate-y-1/2 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-105 active:scale-95"
+          >
+            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+        <div className="text-center mt-2">
+          <span className="text-[10px] text-muted-foreground/50">AI can make mistakes. Please verify important information.</span>
+        </div>
+      </div>
     </div>
   )
 }

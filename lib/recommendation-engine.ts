@@ -2,8 +2,8 @@ import { allTools, type Tool } from "./tools-data"
 
 export interface UserPreferences {
   favoriteCategories: string[]
-  viewedTools: string[]
-  ratedTools: { toolId: string; rating: number }[]
+  viewedTools: number[]
+  ratedTools: { toolId: number; rating: number }[]
   searchHistory: string[]
 }
 
@@ -59,7 +59,7 @@ export class RecommendationEngine {
   }
 
   // Track user interactions
-  trackToolView(userId: string, toolId: string) {
+  trackToolView(userId: string, toolId: number) {
     const preferences = this.getUserPreferences(userId)
     const viewedTools = [...preferences.viewedTools]
 
@@ -78,7 +78,7 @@ export class RecommendationEngine {
     this.updateUserPreferences(userId, { viewedTools })
   }
 
-  trackToolRating(userId: string, toolId: string, rating: number) {
+  trackToolRating(userId: string, toolId: number, rating: number) {
     const preferences = this.getUserPreferences(userId)
     const ratedTools = [...preferences.ratedTools]
 
@@ -189,7 +189,7 @@ export class RecommendationEngine {
   }
 
   // Get similar tools based on a specific tool
-  getSimilarTools(toolId: string, limit = 4): Tool[] {
+  getSimilarTools(toolId: number, limit = 4): Tool[] {
     const targetTool = allTools.find((t) => t.id === toolId)
     if (!targetTool) return []
 

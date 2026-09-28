@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import {
   Brain,
   Users,
@@ -91,7 +92,6 @@ const mockReviews = [
 export default function AdminPage() {
   const { user, isAdmin } = useAuth()
   const router = useRouter()
-  const [selectedTool, setSelectedTool] = useState(null)
   const [isAddToolOpen, setIsAddToolOpen] = useState(false)
 
   useEffect(() => {
@@ -339,9 +339,11 @@ export default function AdminPage() {
                       <TableRow key={tool.id}>
                         <TableCell>
                           <div className="flex items-center space-x-3">
-                            <img
+                            <Image
                               src={tool.image || "/placeholder.svg"}
                               alt={tool.name}
+                              width={40}
+                              height={40}
                               className="w-10 h-10 rounded-lg object-cover"
                             />
                             <div>

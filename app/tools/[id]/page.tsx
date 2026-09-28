@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import {
   Brain,
   Star,
@@ -28,46 +29,77 @@ import { useAuth } from "@/lib/auth-context"
 import { recommendationEngine } from "@/lib/recommendation-engine"
 import { SimilarTools } from "@/components/similar-tools"
 import ReviewForm from "@/components/review-form"
+import { allTools } from "@/lib/tools-data"
+import { useToast } from "@/components/ui/use-toast"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 
-// Mock data for tools - in real app, this would come from API
-const toolsData = {
-  "1": {
-    id: "1",
-    name: "GPT-4 Turbo",
-    description:
-      "Advanced language model for text generation, analysis, and conversation with improved reasoning capabilities and extended context window.",
-    longDescription:
-      "GPT-4 Turbo represents the latest advancement in large language models, offering unprecedented capabilities in text generation, analysis, and conversational AI. With its extended context window of 128,000 tokens, it can process and understand much longer documents and conversations while maintaining coherence and accuracy throughout.",
-    category: "Language Models",
-    rating: 4.8,
-    reviews: 2847,
-    pricing: "Pay-per-use",
-    website: "https://openai.com/gpt-4",
-    image: "/placeholder-xoj99.png",
-    tags: ["Text Generation", "Analysis", "Chatbot", "API"],
+// Extended tool interface for detail page
+interface Tool {
+  id: string
+  name: string
+  description: string
+  longDescription: string
+  category: string
+  rating: number
+  reviews: number
+  pricing: string
+  website: string
+  image: string
+  tags: string[]
+  features: string[]
+  useCases: string[]
+  pros: string[]
+  cons: string[]
+  lastUpdated: string
+  developer: string
+  supportedLanguages: string[]
+}
+
+interface ReviewData {
+  rating: number
+  title: string
+  content: string
+  tags: string[]
+}
+
+// Create extended tool data from allTools with default values for missing fields
+const toolsData: Record<string, Tool> = {}
+allTools.forEach((tool) => {
+  toolsData[tool.id.toString()] = {
+    id: tool.id.toString(),
+    name: tool.name,
+    description: tool.description,
+    longDescription: tool.longDescription || tool.description,
+    category: tool.category,
+    rating: tool.rating,
+    reviews: tool.reviews,
+    pricing: tool.pricing,
+    website: tool.website || "#",
+    image: tool.image,
+    tags: tool.tags,
     features: [
-      "Extended 128K context window",
-      "Improved reasoning capabilities",
-      "Multimodal input support",
-      "Function calling",
-      "JSON mode output",
-      "Reproducible outputs",
+      "Advanced AI capabilities",
+      "User-friendly interface",
+      "Regular updates and improvements",
+      "Comprehensive documentation",
+      "API access available",
+      "Multi-platform support",
     ],
     useCases: [
-      "Content creation and editing",
-      "Code generation and debugging",
-      "Data analysis and insights",
-      "Customer support automation",
-      "Educational tutoring",
-      "Creative writing assistance",
+      "Professional workflows",
+      "Creative projects",
+      "Business automation",
+      "Research and analysis",
+      "Content creation",
+      "Productivity enhancement",
     ],
-    pros: ["Exceptional text quality", "Large context window", "Versatile applications", "Strong reasoning abilities"],
-    cons: ["Can be expensive for high usage", "Occasional hallucinations", "Rate limits on API"],
-    lastUpdated: "2024-01-15",
-    developer: "OpenAI",
-    supportedLanguages: ["English", "Spanish", "French", "German", "Chinese", "Japanese", "+50 more"],
-  },
-}
+    pros: ["High quality output", "Easy to use", "Regular updates", "Great support"],
+    cons: ["Pricing may vary", "Learning curve for advanced features", "Requires internet connection"],
+    lastUpdated: tool.lastUpdated || "2024-01-01",
+    developer: tool.developer || "Unknown",
+    supportedLanguages: ["English", "Spanish", "French", "German", "Chinese", "+20 more"],
+  }
+})
 
 const mockReviews = [
   {
@@ -112,29 +144,53 @@ export default function ToolDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { user } = useAuth()
-  const [tool, setTool] = useState(null)
+  const reduceMotion = Boolean(useReducedMotion())
+  const [tool, setTool] = useState<Tool | null>(null)
   const [reviews, setReviews] = useState(mockReviews)
   const [isFavorited, setIsFavorited] = useState(false)
   const [showReviewForm, setShowReviewForm] = useState(false)
+  const { toast } = useToast()
+
+  const handleShare = async () => {
+    if (!tool) return
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: tool.name,
+          text: `Check out ${tool.name} on AI Tools Hub!`,
+          url: window.location.href,
+        })
+      } else {
+        await navigator.clipboard.writeText(window.location.href)
+        toast({
+          title: "Link Copied",
+          description: "Tool link copied to clipboard",
+        })
+      }
+    } catch (error) {
+      console.error("Error sharing:", error)
+    }
+  }
 
   useEffect(() => {
     const toolData = toolsData[params.id as string]
     if (toolData) {
       setTool(toolData)
       if (user) {
-        recommendationEngine.trackToolView(user.id, toolData.id)
+        recommendationEngine.trackToolView(user.id, parseInt(toolData.id))
       }
     }
   }, [params.id, user])
 
   if (!tool) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <motion.div initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-background flex items-center justify-center" role="status" aria-label="Loading tool details">
         <div className="text-center">
           <Brain className="h-12 w-12 text-primary mx-auto mb-4 animate-pulse" />
           <p className="text-muted-foreground">Loading tool details...</p>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
@@ -146,7 +202,7 @@ export default function ToolDetailPage() {
     { stars: 1, count: 14, percentage: 1 },
   ]
 
-  const handleReviewSubmit = (reviewData) => {
+  const handleReviewSubmit = (reviewData: ReviewData) => {
     const newReview = {
       id: reviews.length + 1,
       user: {
@@ -166,55 +222,25 @@ export default function ToolDetailPage() {
     setShowReviewForm(false)
 
     if (user) {
-      recommendationEngine.trackToolRating(user.id, tool.id, reviewData.rating)
+      recommendationEngine.trackToolRating(user.id, parseInt(tool.id), reviewData.rating)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" onClick={() => router.back()}>
-                <ChevronLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <div className="flex items-center space-x-2">
-                <Brain className="h-6 w-6 text-primary" />
-                <Link
-                  href="/"
-                  className="text-lg font-serif font-black text-foreground hover:text-primary transition-colors"
-                >
-                  AI Tools Hub
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              {user ? (
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/dashboard">Dashboard</Link>
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/login">Sign In</Link>
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <AnimatePresence mode="wait" initial={false}>
+    <motion.div key={tool.id} initial={reduceMotion ? false : { opacity: 0, y: 14, filter: "blur(5px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={reduceMotion ? undefined : { opacity: 0, y: -8, filter: "blur(3px)" }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 130, damping: 22 }} className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
+        <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-5 text-muted-foreground"><ChevronLeft className="mr-2 h-4 w-4"/>Back to tools</Button>
         {/* Tool Header */}
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="flex-1">
               <div className="flex items-start gap-6 mb-6">
-                <img
+                <Image
                   src={tool.image || "/placeholder.svg"}
                   alt={tool.name}
+                  width={96}
+                  height={96}
                   className="w-24 h-24 rounded-xl border-2 border-border object-cover"
                 />
                 <div className="flex-1">
@@ -231,11 +257,10 @@ export default function ToolDetailPage() {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
                             key={star}
-                            className={`h-5 w-5 ${
-                              star <= Math.floor(tool.rating)
-                                ? "fill-yellow-400 text-yellow-400"
-                                : "text-muted-foreground"
-                            }`}
+                            className={`h-5 w-5 ${star <= Math.floor(tool.rating)
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground"
+                              }`}
                           />
                         ))}
                       </div>
@@ -290,7 +315,7 @@ export default function ToolDetailPage() {
                       >
                         <Heart className={`h-4 w-4 ${isFavorited ? "fill-red-500" : ""}`} />
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={handleShare}>
                         <Share2 className="h-4 w-4" />
                       </Button>
                       <Button variant="outline" size="sm">
@@ -391,7 +416,7 @@ export default function ToolDetailPage() {
 
             <Card className="border-2">
               <CardContent className="p-6">
-                <SimilarTools toolId={tool.id} />
+                <SimilarTools toolId={parseInt(tool.id)} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -410,11 +435,10 @@ export default function ToolDetailPage() {
                       {[1, 2, 3, 4, 5].map((star) => (
                         <Star
                           key={star}
-                          className={`h-5 w-5 ${
-                            star <= Math.floor(tool.rating)
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-muted-foreground"
-                          }`}
+                          className={`h-5 w-5 ${star <= Math.floor(tool.rating)
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground"
+                            }`}
                         />
                       ))}
                     </div>
@@ -473,11 +497,10 @@ export default function ToolDetailPage() {
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <Star
                                     key={star}
-                                    className={`h-4 w-4 ${
-                                      star <= review.rating
-                                        ? "fill-yellow-400 text-yellow-400"
-                                        : "text-muted-foreground"
-                                    }`}
+                                    className={`h-4 w-4 ${star <= review.rating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-muted-foreground"
+                                      }`}
                                   />
                                 ))}
                               </div>
@@ -512,7 +535,7 @@ export default function ToolDetailPage() {
             <Card className="border-2">
               <CardHeader>
                 <CardTitle className="font-serif">Detailed Features</CardTitle>
-                <CardDescription>Comprehensive breakdown of {tool.name}'s capabilities</CardDescription>
+                <CardDescription>Comprehensive breakdown of {tool.name}&apos;s capabilities</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -563,12 +586,13 @@ export default function ToolDetailPage() {
                 <CardDescription>AI tools with similar capabilities and use cases</CardDescription>
               </CardHeader>
               <CardContent>
-                <SimilarTools toolId={tool.id} limit={6} />
+                <SimilarTools toolId={parseInt(tool.id)} limit={6} />
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </motion.div>
+    </AnimatePresence>
   )
 }
